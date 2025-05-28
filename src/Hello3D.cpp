@@ -245,7 +245,7 @@ int main() {
     glEnable(GL_DEPTH_TEST);
 
     entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Cube.obj");
-    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Suzanne.obj");
+    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Cube.obj");
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
