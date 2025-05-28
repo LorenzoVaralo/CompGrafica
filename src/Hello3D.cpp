@@ -21,14 +21,40 @@ glm::vec3 calculateNormal(const glm::vec3& v1, const glm::vec3& v2, const glm::v
     return glm::normalize(glm::cross(edge1, edge2));
 }
 
-// Determine color based on angle between normal and base direction
-glm::vec3 colorFromAngle(const glm::vec3& normal) {
-    glm::vec3 baseDirection(0.0f, 1.0f, 0.0f); // Using Y as the base direction
-    float angle = glm::dot(normal, baseDirection);
-    angle = (angle + 1.0f) / 2.0f; // Normalize between [0, 1]
+// Determine color based on the principal direction of the normal vector
+glm::vec3 colorFromDirection(const glm::vec3& normal) {
+    // Define colors corresponding to +x, -x, +y, -y, +z, -z
+    glm::vec3 colors[6] = {
+        glm::vec3(1.0f, 0.0f, 0.0f), // +x
+        glm::vec3(0.6f, 0.0f, 0.0f), // -x
+        glm::vec3(0.0f, 1.0f, 0.0f), // +y
+        glm::vec3(0.0f, 0.6f, 0.0f), // -y
+        glm::vec3(0.0f, 0.0f, 1.0f), // +z
+        glm::vec3(0.0f, 0.0f, 0.6f)  // -z
+    };
 
-    // Simple gradient between two colors based on angle
-    return glm::mix(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), angle);
+    // Compute the weights based on proximity
+    float weights[6];
+    weights[0] = std::max(0.0f, normal.x); // +x
+    weights[1] = std::max(0.0f, -normal.x); // -x
+    weights[2] = std::max(0.0f, normal.y); // +y
+    weights[3] = std::max(0.0f, -normal.y); // -y
+    weights[4] = std::max(0.0f, normal.z); // +z
+    weights[5] = std::max(0.0f, -normal.z); // -z
+
+    // Normalize weights
+    float sumWeights = weights[0] + weights[1] + weights[2] + weights[3] + weights[4] + weights[5];
+    for (int i = 0; i < 6; ++i) {
+        weights[i] /= sumWeights;
+    }
+
+    // Interpolate colors based on weights
+    glm::vec3 mixedColor = glm::vec3(0.0f);
+    for (int i = 0; i < 6; ++i) {
+        mixedColor += weights[i] * colors[i];
+    }
+
+    return mixedColor;
 }
 
 class Entity {
@@ -118,7 +144,7 @@ private:
 
                 if (faceVertices.size() == 3) {
                     glm::vec3 normal = calculateNormal(faceVertices[0], faceVertices[1], faceVertices[2]);
-                    glm::vec3 color = colorFromAngle(normal);
+                    glm::vec3 color = colorFromDirection(normal);
                     for (auto& vert : faceVertices) {
                         vBuffer.push_back(vert.x);
                         vBuffer.push_back(vert.y);
