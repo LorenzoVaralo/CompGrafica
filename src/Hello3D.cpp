@@ -158,12 +158,12 @@ int main()
 		// Poligono Preenchido - GL_TRIANGLES
 		
 		glBindVertexArray(VAO);
-		glDrawArrays(GL_TRIANGLES, 0, 18);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
 
 		// Chamada de desenho - drawcall
 		// CONTORNO - GL_LINE_LOOP
 		
-		glDrawArrays(GL_POINTS, 0, 18);
+		glDrawArrays(GL_POINTS, 0, 36);
 		glBindVertexArray(0);
 
 		// Troca os buffers da tela
@@ -268,37 +268,61 @@ int setupGeometry()
 	// sequencial, já visando mandar para o VBO (Vertex Buffer Objects)
 	// Cada atributo do vértice (coordenada, cores, coordenadas de textura, normal, etc)
 	// Pode ser arazenado em um VBO único ou em VBOs separados
-	GLfloat vertices[] = {
+GLfloat vertices[] = {
+    // Front face (red)
+    -0.5, -0.5, 0.5, 1.0, 0.0, 0.0,  // Bottom-left
+     0.5, -0.5, 0.5, 1.0, 0.0, 0.0,  // Bottom-right
+     0.5,  0.5, 0.5, 1.0, 0.0, 0.0,  // Top-right
 
-		//Base da pirâmide: 2 triângulos
-		//x    y    z    r    g    b
-		-0.5, -0.5, -0.5, 1.0, 1.0, 0.0,
-		-0.5, -0.5,  0.5, 0.0, 1.0, 1.0,
-		 0.5, -0.5, -0.5, 1.0, 0.0, 1.0,
+    -0.5, -0.5, 0.5, 1.0, 0.0, 0.0,  // Bottom-left
+     0.5,  0.5, 0.5, 1.0, 0.0, 0.0,  // Top-right
+    -0.5,  0.5, 0.5, 1.0, 0.0, 0.0,  // Top-left
 
-		 -0.5, -0.5, 0.5, 1.0, 1.0, 0.0,
-		  0.5, -0.5,  0.5, 0.0, 1.0, 1.0,
-		  0.5, -0.5, -0.5, 1.0, 0.0, 1.0,
+    // Back face (green)
+    -0.5, -0.5, -0.5, 0.0, 1.0, 0.0, // Bottom-left
+     0.5,  0.5, -0.5, 0.0, 1.0, 0.0, // Top-right
+     0.5, -0.5, -0.5, 0.0, 1.0, 0.0, // Bottom-right
 
-		 //
-		 -0.5, -0.5, -0.5, 1.0, 1.0, 0.0,
-		  0.0,  0.5,  0.0, 1.0, 1.0, 0.0,
-		  0.5, -0.5, -0.5, 1.0, 1.0, 0.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0, 0.0, // Bottom-left
+    -0.5,  0.5, -0.5, 0.0, 1.0, 0.0, // Top-left
+     0.5,  0.5, -0.5, 0.0, 1.0, 0.0, // Top-right
 
-		  -0.5, -0.5, -0.5, 1.0, 0.0, 1.0,
-		  0.0,  0.5,  0.0, 1.0, 0.0, 1.0,
-		  -0.5, -0.5, 0.5, 1.0, 0.0, 1.0,
+    // Left face (blue)
+    -0.5, -0.5, -0.5, 0.0, 0.0, 1.0, // Bottom-back
+    -0.5,  0.5,  0.5, 0.0, 0.0, 1.0, // Top-front
+    -0.5,  0.5, -0.5, 0.0, 0.0, 1.0, // Top-back
 
-		   -0.5, -0.5, 0.5, 1.0, 1.0, 0.0,
-		  0.0,  0.5,  0.0, 1.0, 1.0, 0.0,
-		  0.5, -0.5, 0.5, 1.0, 1.0, 0.0,
+    -0.5, -0.5, -0.5, 0.0, 0.0, 1.0, // Bottom-back
+    -0.5, -0.5,  0.5, 0.0, 0.0, 1.0, // Bottom-front
+    -0.5,  0.5,  0.5, 0.0, 0.0, 1.0, // Top-front
 
-		   0.5, -0.5, 0.5, 0.0, 1.0, 1.0,
-		  0.0,  0.5,  0.0, 0.0, 1.0, 1.0,
-		  0.5, -0.5, -0.5, 0.0, 1.0, 1.0,
+    // Right face (yellow)
+     0.5, -0.5, -0.5, 1.0, 1.0, 0.0, // Bottom-back
+     0.5,  0.5, -0.5, 1.0, 1.0, 0.0, // Top-back
+     0.5,  0.5,  0.5, 1.0, 1.0, 0.0, // Top-front
 
+     0.5, -0.5, -0.5, 1.0, 1.0, 0.0, // Bottom-back
+     0.5,  0.5,  0.5, 1.0, 1.0, 0.0, // Top-front
+     0.5, -0.5,  0.5, 1.0, 1.0, 0.0, // Bottom-front
 
-	};
+    // Top face (cyan)
+    -0.5,  0.5, -0.5, 0.0, 1.0, 1.0, // Top-left-back
+     0.5,  0.5,  0.5, 0.0, 1.0, 1.0, // Top-right-front
+     0.5,  0.5, -0.5, 0.0, 1.0, 1.0, // Top-right-back
+
+    -0.5,  0.5, -0.5, 0.0, 1.0, 1.0, // Top-left-back
+    -0.5,  0.5,  0.5, 0.0, 1.0, 1.0, // Top-left-front
+     0.5,  0.5,  0.5, 0.0, 1.0, 1.0, // Top-right-front
+
+    // Bottom face (magenta)
+    -0.5, -0.5, -0.5, 1.0, 0.0, 1.0, // Bottom-left-back
+     0.5, -0.5, -0.5, 1.0, 0.0, 1.0, // Bottom-right-back
+     0.5, -0.5,  0.5, 1.0, 0.0, 1.0, // Bottom-right-front
+
+    -0.5, -0.5, -0.5, 1.0, 0.0, 1.0, // Bottom-left-back
+     0.5, -0.5,  0.5, 1.0, 0.0, 1.0, // Bottom-right-front
+    -0.5, -0.5,  0.5, 1.0, 0.0, 1.0, // Bottom-left-front
+};
 
 	GLuint VBO, VAO;
 
