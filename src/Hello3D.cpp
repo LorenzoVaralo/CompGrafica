@@ -59,6 +59,8 @@ glm::vec3 colorFromDirection(const glm::vec3& normal) {
 
 class Entity {
 public:
+    glm::vec3 position;
+
     Entity(float x, float y, float z, float initialScale, const std::string& objFilePath)
         : position(x, y, z), scaleFactor(initialScale), rotateX(false), rotateY(false), rotateZ(false) {
         VAO = loadSimpleOBJ(objFilePath, nVertices);
@@ -103,7 +105,6 @@ public:
 private:
     GLuint VAO;
     int nVertices;
-    glm::vec3 position;
     float scaleFactor;
     bool rotateX, rotateY, rotateZ;
     GLuint shaderProgram;
@@ -272,6 +273,21 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         Entity& selectedEntity = entities[selectedEntityIndex];
 
+		float moveStep = 0.1f; // Adjust this value to change movement speed
+
+        if (key == GLFW_KEY_W) {
+            selectedEntity.position.y += moveStep;
+        }
+        if (key == GLFW_KEY_S) {
+            selectedEntity.position.y -= moveStep;
+        }
+        if (key == GLFW_KEY_A) {
+            selectedEntity.position.x -= moveStep;
+        }
+        if (key == GLFW_KEY_D) {
+            selectedEntity.position.x += moveStep;
+        }
+
         if (key == GLFW_KEY_X) {
             selectedEntity.toggleRotateX();
         }
@@ -287,10 +303,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         if (key == GLFW_KEY_RIGHT_BRACKET) {
             selectedEntity.scaleUp();
         }
-        if (key == GLFW_KEY_D) {
+        if (key == GLFW_KEY_N) {
             selectedEntityIndex = (selectedEntityIndex + 1) % entities.size();
         }
-        if (key == GLFW_KEY_A) {
+        if (key == GLFW_KEY_P) {
             selectedEntityIndex = (selectedEntityIndex - 1 + entities.size()) % entities.size();
         }
     }
