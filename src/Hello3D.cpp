@@ -1,77 +1,69 @@
+#define STB_IMAGE_IMPLEMENTATION
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <algorithm> // Include algorithm for std::min and std::max
+#include <unordered_map>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <stb_image.h> // Include stb_image for texture loading
+
+void log(const std::string& message) {
+    std::cerr << "[LOG]: " << message << std::endl;
+}
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 const GLuint WIDTH = 1000, HEIGHT = 1000;
 int selectedEntityIndex = 0;
 
-// Calculate the normal vector of the triangle
-glm::vec3 calculateNormal(const glm::vec3& v1, const glm::vec3& v2, const glm::vec3& v3) {
-    glm::vec3 edge1 = v2 - v1;
-    glm::vec3 edge2 = v3 - v1;
-    return glm::normalize(glm::cross(edge1, edge2));
-}
+GLuint loadTexture(const std::string& filepath) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_2D, textureId);
 
-// Determine color based on the principal direction of the normal vector
-glm::vec3 colorFromDirection(const glm::vec3& normal) {
-    // Define colors corresponding to +x, -x, +y, -y, +z, -z
-    glm::vec3 colors[6] = {
-        glm::vec3(1.0f, 0.0f, 0.0f), // +x
-        glm::vec3(0.6f, 0.0f, 0.0f), // -x
-        glm::vec3(0.0f, 1.0f, 0.0f), // +y
-        glm::vec3(0.0f, 0.6f, 0.0f), // -y
-        glm::vec3(0.0f, 0.0f, 1.0f), // +z
-        glm::vec3(0.0f, 0.0f, 0.6f)  // -z
-    };
-
-    // Compute the weights based on proximity
-    float weights[6];
-    weights[0] = std::max(0.0f, normal.x); // +x
-    weights[1] = std::max(0.0f, -normal.x); // -x
-    weights[2] = std::max(0.0f, normal.y); // +y
-    weights[3] = std::max(0.0f, -normal.y); // -y
-    weights[4] = std::max(0.0f, normal.z); // +z
-    weights[5] = std::max(0.0f, -normal.z); // -z
-
-    // Normalize weights
-    float sumWeights = weights[0] + weights[1] + weights[2] + weights[3] + weights[4] + weights[5];
-    for (int i = 0; i < 6; ++i) {
-        weights[i] /= sumWeights;
+    int width, height, nrChannels;
+    unsigned char* data = stbi_load(filepath.c_str(), &width, &height, &nrChannels, 0);
+    if (data) {
+        log("Texture loaded successfully: " + filepath);
+        GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
+        glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        log("Generated mipmaps for texture.");
+    } else {
+        log("Failed to load texture at path: " + filepath);
+        // Handle this case or load a default texture to avoid segmentation faults
     }
+    stbi_image_free(data);
 
-    // Interpolate colors based on weights
-    glm::vec3 mixedColor = glm::vec3(0.0f);
-    for (int i = 0; i < 6; ++i) {
-        mixedColor += weights[i] * colors[i];
-    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    return mixedColor;
+    return textureId;
 }
 
 class Entity {
 public:
     glm::vec3 position;
 
-    Entity(float x, float y, float z, float initialScale, const std::string& objFilePath)
+    Entity(float x, float y, float z, float initialScale, const std::string& objFilePath, const std::string& mtlFilePath)
         : position(x, y, z), scaleFactor(initialScale), rotateX(false), rotateY(false), rotateZ(false) {
-        VAO = loadSimpleOBJ(objFilePath, nVertices);
+        VAO = loadModel(objFilePath, mtlFilePath, nVertices);
         if (VAO == -1) {
-            std::cerr << "Failed to load model from " << objFilePath << std::endl;
+            log("Failed to load model from: " + objFilePath);
         }
         setupShaders();
     }
 
     void draw() {
         glUseProgram(shaderProgram);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
 
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, position);
@@ -103,65 +95,88 @@ public:
     void scaleDown() { scaleFactor = std::max(0.1f, scaleFactor - 0.1f); }
 
 private:
-    GLuint VAO;
+    GLuint VAO, texture;
     int nVertices;
     float scaleFactor;
     bool rotateX, rotateY, rotateZ;
     GLuint shaderProgram;
 
-    int loadSimpleOBJ(const std::string& filePath, int& nVertices) {
+    int loadModel(const std::string& objFilePath, const std::string& mtlFilePath, int& nVertices) {
         std::vector<glm::vec3> vertices;
+        std::vector<glm::vec2> texCoords;
         std::vector<GLfloat> vBuffer;
 
-        std::ifstream arqEntrada(filePath.c_str());
-        if (!arqEntrada.is_open()) {
-            std::cerr << "Erro ao tentar ler o arquivo " << filePath << std::endl;
+        std::ifstream objFile(objFilePath);
+        if (!objFile.is_open()) {
+            log("Error opening OBJ file: " + objFilePath);
             return -1;
         }
 
+        std::unordered_map<std::string, GLuint> textureMap;
+        std::ifstream mtlFile(mtlFilePath);
+        if (mtlFile.is_open()) {
+            std::string line;
+            std::string textureFilePath;
+
+            while (std::getline(mtlFile, line)) {
+                std::istringstream ssLine(line);
+                std::string keyword;
+                ssLine >> keyword;
+
+                if (keyword == "map_Kd") {
+                    ssLine >> textureFilePath;
+                    textureMap[textureFilePath] = loadTexture(textureFilePath);
+                }
+            }
+            mtlFile.close();
+        } else {
+            log("Error opening MTL file: " + mtlFilePath);
+        }
+
         std::string line;
-        std::vector<glm::vec3> faceVertices;
+        while (std::getline(objFile, line)) {
+            std::istringstream ssLine(line);
+            std::string prefix;
+            ssLine >> prefix;
 
-        while (std::getline(arqEntrada, line)) {
-            std::istringstream ssline(line);
-            std::string word;
-            ssline >> word;
+            if (prefix == "v") {
+                glm::vec3 vertex;
+                ssLine >> vertex.x >> vertex.y >> vertex.z;
+                vertices.push_back(vertex);
+            } else if (prefix == "vt") {
+                glm::vec2 texCoord;
+                ssLine >> texCoord.x >> texCoord.y;
+                texCoords.push_back(texCoord);
+            } else if (prefix == "f") {
+                glm::vec3 face[3];
+                glm::vec2 texFace[3];
+                int vIndex[3], tIndex[3];
 
-            if (word == "v") {
-                glm::vec3 vertice;
-                ssline >> vertice.x >> vertice.y >> vertice.z;
-                vertices.push_back(vertice);
-            } else if (word == "f") {
-                faceVertices.clear();
-                while (ssline >> word) {
-                    int vi = 0;
-                    std::istringstream ss(word);
-                    std::string index;
-
-                    if (std::getline(ss, index, '/')) vi = !index.empty() ? std::stoi(index) - 1 : 0;
-
-                    faceVertices.push_back(vertices[vi]);
+                for (int i = 0; i < 3; ++i) {
+                    std::string vertexData;
+                    ssLine >> vertexData;
+                    if (sscanf(vertexData.c_str(), "%d/%d", &vIndex[i], &tIndex[i]) != 2) {
+                        log("Invalid vertex data format in OBJ file: " + vertexData);
+                        return -1;
+                    }
+                    face[i] = vertices[vIndex[i] - 1];
+                    texFace[i] = texCoords[tIndex[i] - 1];
                 }
 
-                if (faceVertices.size() == 3) {
-                    glm::vec3 normal = calculateNormal(faceVertices[0], faceVertices[1], faceVertices[2]);
-                    glm::vec3 color = colorFromDirection(normal);
-                    for (auto& vert : faceVertices) {
-                        vBuffer.push_back(vert.x);
-                        vBuffer.push_back(vert.y);
-                        vBuffer.push_back(vert.z);
+                for (int i = 0; i < 3; ++i) {
+                    vBuffer.push_back(face[i].x);
+                    vBuffer.push_back(face[i].y);
+                    vBuffer.push_back(face[i].z);
 
-                        vBuffer.push_back(color.r);
-                        vBuffer.push_back(color.g);
-                        vBuffer.push_back(color.b);
-                    }
+                    vBuffer.push_back(texFace[i].x);
+                    vBuffer.push_back(texFace[i].y);
                 }
             }
         }
 
-        arqEntrada.close();
+        objFile.close();
 
-        GLuint VBO, VAO;
+        GLuint VBO;
         glGenBuffers(1, &VBO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, vBuffer.size() * sizeof(GLfloat), vBuffer.data(), GL_STATIC_DRAW);
@@ -170,52 +185,78 @@ private:
         glBindVertexArray(VAO);
 
         // Position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);
         glEnableVertexAttribArray(0);
 
-        // Color attribute
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+        // Texture coord attribute
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
         glEnableVertexAttribArray(1);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
-        nVertices = vBuffer.size() / 6;
+        nVertices = vBuffer.size() / 5;
+        if (!textureMap.empty()) {
+            texture = textureMap.begin()->second; // Assuming a single texture, extend if needed
+        } else {
+            log("Warning: No textures loaded for: " + objFilePath);
+        }
         return VAO;
     }
 
     void setupShaders() {
         const GLchar* vertexShaderSource = "#version 410\n"
             "layout (location = 0) in vec3 position;\n"
-            "layout (location = 1) in vec3 color;\n"
-            "out vec3 vertexColor;\n"
+            "layout (location = 1) in vec2 texCoord;\n"
+            "out vec2 TexCoord;\n"
             "uniform mat4 model;\n"
             "void main()\n"
             "{\n"
             "gl_Position = model * vec4(position, 1.0);\n"
-            "vertexColor = color;\n"
-            "}\0";
+            "TexCoord = texCoord;\n"
+            "}";
 
         const GLchar* fragmentShaderSource = "#version 410\n"
-            "in vec3 vertexColor;\n"
+            "in vec2 TexCoord;\n"
             "out vec4 color;\n"
+            "uniform sampler2D textureSampler;\n"
             "void main()\n"
             "{\n"
-            "color = vec4(vertexColor, 1.0);\n"
-            "}\n\0";
+            "color = texture(textureSampler, TexCoord);\n"
+            "}";
 
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
         glCompileShader(vertexShader);
 
+        GLint success;
+        GLchar infoLog[512];
+        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+            log(std::string("Vertex shader compilation failed: ") + infoLog);
+        }
+
         GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
         glCompileShader(fragmentShader);
+
+        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+            log(std::string("Fragment shader compilation failed: ") + infoLog);
+        }
 
         shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram, vertexShader);
         glAttachShader(shaderProgram, fragmentShader);
         glLinkProgram(shaderProgram);
+
+        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+        if (!success) {
+            glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+            log(std::string("Shader program linking failed: ") + infoLog);
+        }
 
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
@@ -225,7 +266,12 @@ private:
 std::vector<Entity> entities;
 
 int main() {
-    glfwInit();
+    log("Initializing GLFW");
+    if (!glfwInit()) {
+        log("Failed to initialize GLFW");
+        return -1;
+    }
+
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 
@@ -234,20 +280,27 @@ int main() {
 #endif
 
     GLFWwindow* window = glfwCreateWindow(WIDTH, HEIGHT, "Atividade Vivencial 1", nullptr, nullptr);
-    glfwMakeContextCurrent(window);
+    if (!window) {
+        log("Failed to create GLFW window");
+        glfwTerminate();
+        return -1;
+    }
 
+    glfwMakeContextCurrent(window);
     glfwSetKeyCallback(window, key_callback);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cout << "Failed to initialize GLAD" << std::endl;
+        log("Failed to initialize GLAD");
         return -1;
     }
 
     glEnable(GL_DEPTH_TEST);
 
-    entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Cube.obj");
-    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Cube.obj");
+    log("Creating Entities");
+    entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
+    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
 
+    log("Entering render loop");
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
 
@@ -261,6 +314,7 @@ int main() {
         glfwSwapBuffers(window);
     }
 
+    log("Terminating GLFW");
     glfwTerminate();
     return 0;
 }
@@ -273,7 +327,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         Entity& selectedEntity = entities[selectedEntityIndex];
 
-		float moveStep = 0.1f; // Adjust this value to change movement speed
+        float moveStep = 0.1f; // Adjust this value to change movement speed
 
         if (key == GLFW_KEY_W) {
             selectedEntity.position.y += moveStep;
