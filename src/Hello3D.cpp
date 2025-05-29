@@ -52,7 +52,8 @@ public:
     glm::vec3 position;
 
     Entity(float x, float y, float z, float initialScale, const std::string& objFilePath, const std::string& mtlFilePath)
-        : position(x, y, z), scaleFactor(initialScale), rotateX(false), rotateY(false), rotateZ(false) {
+        : position(x, y, z), scaleFactor(initialScale), VAO(0), texture(0), nVertices(0),
+          rotateX(false), rotateY(false), rotateZ(false) {
         VAO = loadModel(objFilePath, mtlFilePath, nVertices);
         if (VAO == -1) {
             log("Failed to load model from: " + objFilePath);
@@ -64,6 +65,7 @@ public:
         glUseProgram(shaderProgram);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
+        glUniform1i(glGetUniformLocation(shaderProgram, "textureSampler"), 0); // Set the sampler to texture unit 0
 
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, position);
@@ -101,7 +103,7 @@ private:
     bool rotateX, rotateY, rotateZ;
     GLuint shaderProgram;
 
-    int loadModel(const std::string& objFilePath, const std::string& mtlFilePath, int& nVertices) {
+        int loadModel(const std::string& objFilePath, const std::string& mtlFilePath, int& nVertices) {
         std::vector<glm::vec3> vertices;
         std::vector<glm::vec2> texCoords;
         std::vector<GLfloat> vBuffer;
@@ -146,30 +148,45 @@ private:
             } else if (prefix == "vt") {
                 glm::vec2 texCoord;
                 ssLine >> texCoord.x >> texCoord.y;
+				texCoord.y = 1.0f - texCoord.y; // Flip the V coordinate!!!
+
                 texCoords.push_back(texCoord);
             } else if (prefix == "f") {
-                glm::vec3 face[3];
-                glm::vec2 texFace[3];
-                int vIndex[3], tIndex[3];
+                int vIndex[3], tIndex[3], nIndex[3];
 
                 for (int i = 0; i < 3; ++i) {
                     std::string vertexData;
                     ssLine >> vertexData;
-                    if (sscanf(vertexData.c_str(), "%d/%d", &vIndex[i], &tIndex[i]) != 2) {
-                        log("Invalid vertex data format in OBJ file: " + vertexData);
+                    vIndex[i] = 0;
+                    tIndex[i] = 0;
+                    nIndex[i] = 0;
+                    int matches = sscanf(vertexData.c_str(), "%d/%d/%d", &vIndex[i], &tIndex[i], &nIndex[i]);
+                    if (matches < 1) {
+                        log("Invalid face data: " + vertexData);
                         return -1;
+                    } else if (matches == 1) {
+                        // Vertex only
+                    } else if (matches >= 2) {
+                        // Vertex/Texture or Vertex/Texture/Normal
+                        if (tIndex[i] > 0) tIndex[i]--; // OBJ indices are 1-based
                     }
-                    face[i] = vertices[vIndex[i] - 1];
-                    texFace[i] = texCoords[tIndex[i] - 1];
+                    if (vIndex[i] > 0) vIndex[i]--; // OBJ indices are 1-based
+                    if (nIndex[i] > 0) nIndex[i]--; // OBJ indices are 1-based
                 }
 
                 for (int i = 0; i < 3; ++i) {
-                    vBuffer.push_back(face[i].x);
-                    vBuffer.push_back(face[i].y);
-                    vBuffer.push_back(face[i].z);
+                    vBuffer.push_back(vertices[vIndex[i]].x);
+                    vBuffer.push_back(vertices[vIndex[i]].y);
+                    vBuffer.push_back(vertices[vIndex[i]].z);
 
-                    vBuffer.push_back(texFace[i].x);
-                    vBuffer.push_back(texFace[i].y);
+                    if (!texCoords.empty() && tIndex[i] >= 0) {
+                        vBuffer.push_back(texCoords[tIndex[i]].x);
+                        vBuffer.push_back(texCoords[tIndex[i]].y);
+                    } else {
+                        vBuffer.push_back(0.0f);
+                        vBuffer.push_back(0.0f);
+                    }
+					// would handle normals here if needed
                 }
             }
         }
@@ -197,7 +214,7 @@ private:
 
         nVertices = vBuffer.size() / 5;
         if (!textureMap.empty()) {
-            texture = textureMap.begin()->second; // Assuming a single texture, extend if needed
+            texture = textureMap.begin()->second;
         } else {
             log("Warning: No textures loaded for: " + objFilePath);
         }
