@@ -10,7 +10,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <stb_image.h> // Include stb_image for texture loading
+#include <stb_image.h>
 
 void log(const std::string& message) {
     std::cerr << "[LOG]: " << message << std::endl;
@@ -32,10 +32,8 @@ GLuint loadTexture(const std::string& filepath) {
         GLenum format = (nrChannels == 4) ? GL_RGBA : GL_RGB;
         glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
         glGenerateMipmap(GL_TEXTURE_2D);
-        log("Generated mipmaps for texture.");
     } else {
         log("Failed to load texture at path: " + filepath);
-        // Handle this case or load a default texture to avoid segmentation faults
     }
     stbi_image_free(data);
 
@@ -46,6 +44,18 @@ GLuint loadTexture(const std::string& filepath) {
 
     return textureId;
 }
+
+glm::vec3 lightColors[] = {
+    glm::vec3(1.0f, 1.0f, 1.0f),
+    glm::vec3(0.4f, 0.4f, 0.4f),
+    glm::vec3(0.3f, 0.3f, 0.3f)
+};
+
+glm::vec3 lightPositions[] = {
+    glm::vec3(1.2f, 1.0f, 2.0f),  // Key Light
+    glm::vec3(-1.2f, 1.0f, 2.0f), // Fill Light
+    glm::vec3(1.2f, -1.0f, 2.0f)  // Back Light
+};
 
 class Entity {
 public:
@@ -89,10 +99,15 @@ public:
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
-        glUniform3f(glGetUniformLocation(shaderProgram, "lightPos"), 1.2f, 1.0f, 2.0f);
-        glUniform3f(glGetUniformLocation(shaderProgram, "lightColor"), 1.0f, 1.0f, 1.0f);
-        glUniform3f(glGetUniformLocation(shaderProgram, "camPos"), 0.0f, 0.0f, 3.0f);
+        for (int i = 0; i < 3; ++i) {
+            std::string posName = "lightPos[" + std::to_string(i) + "]";
+            std::string colorName = "lightColor[" + std::to_string(i) + "]";
+            glUniform3fv(glGetUniformLocation(shaderProgram, posName.c_str()), 1, glm::value_ptr(lightPositions[i]));
+            glUniform3fv(glGetUniformLocation(shaderProgram, colorName.c_str()), 1, glm::value_ptr(lightColors[i]));
+        }
         
+        glUniform3f(glGetUniformLocation(shaderProgram, "camPos"), 0.0f, 0.0f, 3.0f);
+
         glUniform1f(glGetUniformLocation(shaderProgram, "ka"), 0.1f);
         glUniform1f(glGetUniformLocation(shaderProgram, "kd"), 0.8f);
         glUniform1f(glGetUniformLocation(shaderProgram, "ks"), 0.5f);
@@ -166,7 +181,7 @@ private:
             } else if (prefix == "vt") {
                 glm::vec2 texCoord;
                 ssLine >> texCoord.x >> texCoord.y;
-                texCoord.y = 1.0f - texCoord.y; // Flip the V coordinate!!!
+                texCoord.y = 1.0f - texCoord.y;
                 texCoords.push_back(texCoord);
             } else if (prefix == "vn") {
                 glm::vec3 norm;
@@ -279,8 +294,8 @@ private:
             out vec4 FragColor;
 
             uniform sampler2D textureSampler;
-            uniform vec3 lightPos;
-            uniform vec3 lightColor;
+            uniform vec3 lightPos[3];
+            uniform vec3 lightColor[3];
             uniform vec3 camPos;
             
             uniform float ka;
@@ -294,16 +309,20 @@ private:
 
                 vec3 ambient = ka * color;
 
-                vec3 lightDir = normalize(lightPos - FragPos);
-                float diff = max(dot(norm, lightDir), 0.0);
-                vec3 diffuse = kd * diff * lightColor * color;
+                vec3 result = ambient;
+                for (int i = 0; i < 3; ++i) {
+                    vec3 lightDir = normalize(lightPos[i] - FragPos);
+                    float diff = max(dot(norm, lightDir), 0.0);
+                    vec3 diffuse = kd * diff * lightColor[i] * color;
 
-                vec3 viewDir = normalize(camPos - FragPos);
-                vec3 reflectDir = reflect(-lightDir, norm);
-                float spec = pow(max(dot(viewDir, reflectDir), 0.0), q);
-                vec3 specular = ks * spec * lightColor;
+                    vec3 viewDir = normalize(camPos - FragPos);
+                    vec3 reflectDir = reflect(-lightDir, norm);
+                    float spec = pow(max(dot(viewDir, reflectDir), 0.0), q);
+                    vec3 specular = ks * spec * lightColor[i];
 
-                vec3 result = ambient + diffuse + specular;
+                    result += diffuse + specular;
+                }
+                
                 FragColor = vec4(result, 1.0);
             }
         )glsl";
@@ -311,38 +330,39 @@ private:
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
         glCompileShader(vertexShader);
-
-        GLint success;
-        GLchar infoLog[512];
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-            log(std::string("Vertex shader compilation failed: ") + infoLog);
-        }
+        checkCompileErrors(vertexShader, "VERTEX");
 
         GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
         glCompileShader(fragmentShader);
-
-        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-            log(std::string("Fragment shader compilation failed: ") + infoLog);
-        }
+        checkCompileErrors(fragmentShader, "FRAGMENT");
 
         shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram, vertexShader);
         glAttachShader(shaderProgram, fragmentShader);
         glLinkProgram(shaderProgram);
-
-        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-            log(std::string("Shader program linking failed: ") + infoLog);
-        }
+        checkCompileErrors(shaderProgram, "PROGRAM");
 
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
+    }
+
+    void checkCompileErrors(GLuint shader, std::string type) {
+        GLint success;
+        GLchar infoLog[1024];
+        if (type != "PROGRAM") {
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+            if (!success) {
+                glGetShaderInfoLog(shader, 1024, NULL, infoLog);
+                log("Shader compilation error of type: " + type + "\n" + infoLog);
+            }
+        } else {
+            glGetProgramiv(shader, GL_LINK_STATUS, &success);
+            if (!success) {
+                glGetProgramInfoLog(shader, 1024, NULL, infoLog);
+                log("Program linking error of type: " + type + "\n" + infoLog);
+            }
+        }
     }
 };
 
@@ -381,7 +401,7 @@ int main() {
 
     log("Creating Entities");
     entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
-    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/SuzanneSubdiv1.obj", "../assets/Modelos3D/SuzanneSubdiv1.mtl");
+    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
 
     log("Entering render loop");
     while (!glfwWindowShouldClose(window)) {
@@ -410,7 +430,8 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
         Entity& selectedEntity = entities[selectedEntityIndex];
 
-        float moveStep = 0.1f; // Adjust this value to change movement speed
+        float moveStep = 0.1f;
+        float intensityStep = 0.1f;
 
         if (key == GLFW_KEY_W) {
             selectedEntity.position.y += moveStep;
@@ -445,6 +466,32 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
         if (key == GLFW_KEY_P) {
             selectedEntityIndex = (selectedEntityIndex - 1 + entities.size()) % entities.size();
+        }
+
+        if (key == GLFW_KEY_1) {
+            if (mode & GLFW_MOD_SHIFT) {
+                lightColors[0] -= glm::vec3(intensityStep);
+            } else {
+                lightColors[0] += glm::vec3(intensityStep);
+            }
+        }
+        if (key == GLFW_KEY_2) {
+            if (mode & GLFW_MOD_SHIFT) {
+                lightColors[1] -= glm::vec3(intensityStep);
+            } else {
+                lightColors[1] += glm::vec3(intensityStep);
+            }
+        }
+        if (key == GLFW_KEY_3) {
+            if (mode & GLFW_MOD_SHIFT) {
+                lightColors[2] -= glm::vec3(intensityStep);
+            } else {
+                lightColors[2] += glm::vec3(intensityStep);
+            }
+        }
+
+        for (auto& color : lightColors) {
+            color = glm::clamp(color, glm::vec3(0.0f), glm::vec3(3.0f));
         }
     }
 }
