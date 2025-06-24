@@ -63,10 +63,7 @@ public:
 
     void draw() {
         glUseProgram(shaderProgram);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glUniform1i(glGetUniformLocation(shaderProgram, "textureSampler"), 0); // Set the sampler to texture unit 0
-
+        
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, position);
         model = glm::scale(model, glm::vec3(scaleFactor));
@@ -82,8 +79,28 @@ public:
             model = glm::rotate(model, angle, glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
-        GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        glm::mat4 view = glm::lookAt(
+            glm::vec3(0.0f, 0.0f, 3.0f),
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), (GLfloat)WIDTH / (GLfloat)HEIGHT, 0.1f, 100.0f);
+
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+        glUniform3f(glGetUniformLocation(shaderProgram, "lightPos"), 1.2f, 1.0f, 2.0f);
+        glUniform3f(glGetUniformLocation(shaderProgram, "lightColor"), 1.0f, 1.0f, 1.0f);
+        glUniform3f(glGetUniformLocation(shaderProgram, "camPos"), 0.0f, 0.0f, 3.0f);
+        
+        glUniform1f(glGetUniformLocation(shaderProgram, "ka"), 0.1f);
+        glUniform1f(glGetUniformLocation(shaderProgram, "kd"), 0.8f);
+        glUniform1f(glGetUniformLocation(shaderProgram, "ks"), 0.5f);
+        glUniform1f(glGetUniformLocation(shaderProgram, "q"), 32.0f);
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glUniform1i(glGetUniformLocation(shaderProgram, "textureSampler"), 0);
 
         glBindVertexArray(VAO);
         glDrawArrays(GL_TRIANGLES, 0, nVertices);
@@ -103,9 +120,10 @@ private:
     bool rotateX, rotateY, rotateZ;
     GLuint shaderProgram;
 
-        int loadModel(const std::string& objFilePath, const std::string& mtlFilePath, int& nVertices) {
+    int loadModel(const std::string& objFilePath, const std::string& mtlFilePath, int& nVertices) {
         std::vector<glm::vec3> vertices;
         std::vector<glm::vec2> texCoords;
+        std::vector<glm::vec3> normals;
         std::vector<GLfloat> vBuffer;
 
         std::ifstream objFile(objFilePath);
@@ -148,18 +166,18 @@ private:
             } else if (prefix == "vt") {
                 glm::vec2 texCoord;
                 ssLine >> texCoord.x >> texCoord.y;
-				texCoord.y = 1.0f - texCoord.y; // Flip the V coordinate!!!
-
+                texCoord.y = 1.0f - texCoord.y; // Flip the V coordinate!!!
                 texCoords.push_back(texCoord);
+            } else if (prefix == "vn") {
+                glm::vec3 norm;
+                ssLine >> norm.x >> norm.y >> norm.z;
+                normals.push_back(norm);
             } else if (prefix == "f") {
                 int vIndex[3], tIndex[3], nIndex[3];
-
                 for (int i = 0; i < 3; ++i) {
                     std::string vertexData;
                     ssLine >> vertexData;
-                    vIndex[i] = 0;
-                    tIndex[i] = 0;
-                    nIndex[i] = 0;
+                    vIndex[i] = tIndex[i] = nIndex[i] = 0;
                     int matches = sscanf(vertexData.c_str(), "%d/%d/%d", &vIndex[i], &tIndex[i], &nIndex[i]);
                     if (matches < 1) {
                         log("Invalid face data: " + vertexData);
@@ -167,11 +185,10 @@ private:
                     } else if (matches == 1) {
                         // Vertex only
                     } else if (matches >= 2) {
-                        // Vertex/Texture or Vertex/Texture/Normal
-                        if (tIndex[i] > 0) tIndex[i]--; // OBJ indices are 1-based
+                        if (tIndex[i] > 0) tIndex[i]--;
                     }
-                    if (vIndex[i] > 0) vIndex[i]--; // OBJ indices are 1-based
-                    if (nIndex[i] > 0) nIndex[i]--; // OBJ indices are 1-based
+                    if (vIndex[i] > 0) vIndex[i]--;
+                    if (nIndex[i] > 0) nIndex[i]--;
                 }
 
                 for (int i = 0; i < 3; ++i) {
@@ -186,11 +203,19 @@ private:
                         vBuffer.push_back(0.0f);
                         vBuffer.push_back(0.0f);
                     }
-					// would handle normals here if needed
+
+                    if (!normals.empty() && nIndex[i] >= 0) {
+                        vBuffer.push_back(normals[nIndex[i]].x);
+                        vBuffer.push_back(normals[nIndex[i]].y);
+                        vBuffer.push_back(normals[nIndex[i]].z);
+                    } else {
+                        vBuffer.push_back(0.0f);
+                        vBuffer.push_back(0.0f);
+                        vBuffer.push_back(0.0f);
+                    }
                 }
             }
         }
-
         objFile.close();
 
         GLuint VBO;
@@ -201,18 +226,19 @@ private:
         glGenVertexArrays(1, &VAO);
         glBindVertexArray(VAO);
 
-        // Position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
         glEnableVertexAttribArray(0);
 
-        // Texture coord attribute
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
         glEnableVertexAttribArray(1);
+
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(5 * sizeof(GLfloat)));
+        glEnableVertexAttribArray(2);
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
-        nVertices = vBuffer.size() / 5;
+        nVertices = vBuffer.size() / 8;
         if (!textureMap.empty()) {
             texture = textureMap.begin()->second;
         } else {
@@ -222,25 +248,65 @@ private:
     }
 
     void setupShaders() {
-        const GLchar* vertexShaderSource = "#version 410\n"
-            "layout (location = 0) in vec3 position;\n"
-            "layout (location = 1) in vec2 texCoord;\n"
-            "out vec2 TexCoord;\n"
-            "uniform mat4 model;\n"
-            "void main()\n"
-            "{\n"
-            "gl_Position = model * vec4(position, 1.0);\n"
-            "TexCoord = texCoord;\n"
-            "}";
+        const GLchar* vertexShaderSource = R"glsl(
+            #version 410 core
+            layout(location = 0) in vec3 position;
+            layout(location = 1) in vec2 texCoord;
+            layout(location = 2) in vec3 normal;
 
-        const GLchar* fragmentShaderSource = "#version 410\n"
-            "in vec2 TexCoord;\n"
-            "out vec4 color;\n"
-            "uniform sampler2D textureSampler;\n"
-            "void main()\n"
-            "{\n"
-            "color = texture(textureSampler, TexCoord);\n"
-            "}";
+            out vec2 TexCoord;
+            out vec3 FragPos;
+            out vec3 Normal;
+
+            uniform mat4 model;
+            uniform mat4 view;
+            uniform mat4 projection;
+
+            void main() {
+                FragPos = vec3(model * vec4(position, 1.0));
+                Normal = mat3(transpose(inverse(model))) * normal;
+                TexCoord = texCoord;
+                gl_Position = projection * view * vec4(FragPos, 1.0);
+            }
+        )glsl";
+
+        const GLchar* fragmentShaderSource = R"glsl(
+            #version 410 core
+            in vec2 TexCoord;
+            in vec3 FragPos;
+            in vec3 Normal;
+
+            out vec4 FragColor;
+
+            uniform sampler2D textureSampler;
+            uniform vec3 lightPos;
+            uniform vec3 lightColor;
+            uniform vec3 camPos;
+            
+            uniform float ka;
+            uniform float kd;
+            uniform float ks;
+            uniform float q;
+
+            void main() {
+                vec3 color = texture(textureSampler, TexCoord).rgb;
+                vec3 norm = normalize(Normal);
+
+                vec3 ambient = ka * color;
+
+                vec3 lightDir = normalize(lightPos - FragPos);
+                float diff = max(dot(norm, lightDir), 0.0);
+                vec3 diffuse = kd * diff * lightColor * color;
+
+                vec3 viewDir = normalize(camPos - FragPos);
+                vec3 reflectDir = reflect(-lightDir, norm);
+                float spec = pow(max(dot(viewDir, reflectDir), 0.0), q);
+                vec3 specular = ks * spec * lightColor;
+
+                vec3 result = ambient + diffuse + specular;
+                FragColor = vec4(result, 1.0);
+            }
+        )glsl";
 
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
@@ -315,7 +381,7 @@ int main() {
 
     log("Creating Entities");
     entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
-    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
+    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/SuzanneSubdiv1.obj", "../assets/Modelos3D/SuzanneSubdiv1.mtl");
 
     log("Entering render loop");
     while (!glfwWindowShouldClose(window)) {
