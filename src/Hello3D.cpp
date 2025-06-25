@@ -19,6 +19,40 @@ void log(const std::string& message) {
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 const GLuint WIDTH = 1000, HEIGHT = 1000;
 int selectedEntityIndex = 0;
+class Camera {
+public:
+    glm::vec3 position;
+    glm::vec3 front;
+    glm::vec3 up;
+    float speed;
+
+    Camera()
+        : position(0.0f, 0.0f, 3.0f),
+          front(0.0f, 0.0f, -1.0f),
+          up(0.0f, 1.0f, 0.0f),
+          speed(0.05f) {}
+
+    glm::mat4 getViewMatrix() const {
+        return glm::lookAt(position, position + front, up);
+    }
+
+    void moveForward() { position += speed * front; }
+    void moveBackward() { position -= speed * front; }
+    void moveLeft() { position -= glm::normalize(glm::cross(front, up)) * speed; }
+    void moveRight() { position += glm::normalize(glm::cross(front, up)) * speed; }
+    void rotateHorizontal(float angle) {
+        float radians = glm::radians(angle);
+        glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), radians, up);
+        front = glm::vec3(rotation * glm::vec4(front, 0.0f));
+    }
+    void rotateVertical(float angle) {
+        float radians = glm::radians(angle);
+        glm::vec3 right = glm::normalize(glm::cross(front, up));
+        glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), radians, right);
+        front = glm::vec3(rotation * glm::vec4(front, 0.0f));
+    }
+};
+Camera camera;
 
 GLuint loadTexture(const std::string& filepath) {
     GLuint textureId;
@@ -89,10 +123,7 @@ public:
             model = glm::rotate(model, angle, glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
-        glm::mat4 view = glm::lookAt(
-            glm::vec3(0.0f, 0.0f, 3.0f),
-            glm::vec3(0.0f, 0.0f, 0.0f),
-            glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 view = camera.getViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(45.0f), (GLfloat)WIDTH / (GLfloat)HEIGHT, 0.1f, 100.0f);
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
@@ -366,6 +397,8 @@ private:
     }
 };
 
+
+
 std::vector<Entity> entities;
 
 int main() {
@@ -434,16 +467,28 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         float intensityStep = 0.1f;
 
         if (key == GLFW_KEY_W) {
-            selectedEntity.position.y += moveStep;
+            camera.moveForward();
         }
         if (key == GLFW_KEY_S) {
-            selectedEntity.position.y -= moveStep;
+            camera.moveBackward();
         }
         if (key == GLFW_KEY_A) {
-            selectedEntity.position.x -= moveStep;
+            camera.moveLeft();
         }
         if (key == GLFW_KEY_D) {
-            selectedEntity.position.x += moveStep;
+            camera.moveRight();
+        }
+        if (key == GLFW_KEY_LEFT) {
+            camera.rotateHorizontal(5.0f); 
+        }
+        if (key == GLFW_KEY_RIGHT) {
+            camera.rotateHorizontal(-5.0f);
+        }
+        if (key == GLFW_KEY_UP) {
+            camera.rotateVertical(5.0f); 
+        }
+        if (key == GLFW_KEY_DOWN) {
+            camera.rotateVertical(-5.0f);
         }
 
         if (key == GLFW_KEY_X) {
