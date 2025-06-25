@@ -95,15 +95,21 @@ glm::vec3 lightPositions[] = {
 class Entity {
 public:
     glm::vec3 position;
+    glm::vec3 originalPosition; // Store the original position for Bézier movement
+    bool bezierInitialized = false; // Track if Bézier movement is initialized for this entity
 
     Entity(float x, float y, float z, float initialScale, const std::string& objFilePath, const std::string& mtlFilePath)
-        : position(x, y, z), scaleFactor(initialScale), VAO(0), texture(0), nVertices(0),
+        : position(x, y, z), originalPosition(x, y, z), scaleFactor(initialScale), VAO(0), texture(0), nVertices(0),
           rotateX(false), rotateY(false), rotateZ(false) {
         VAO = loadModel(objFilePath, mtlFilePath, nVertices);
         if (VAO == -1) {
             log("Failed to load model from: " + objFilePath);
         }
         setupShaders();
+    }
+
+    void resetBezierState() {
+        bezierInitialized = false;
     }
 
     void draw() {
@@ -402,6 +408,31 @@ private:
 
 std::vector<Entity> entities;
 
+// Function to calculate a point on a Bézier curve
+glm::vec3 bezierPoint(const std::vector<glm::vec3>& controlPoints, float t) {
+    std::vector<glm::vec3> temp = controlPoints;
+    while (temp.size() > 1) {
+        std::vector<glm::vec3> nextTemp;
+        for (size_t i = 0; i < temp.size() - 1; ++i) {
+            nextTemp.push_back(glm::mix(temp[i], temp[i + 1], t));
+        }
+        temp = nextTemp;
+    }
+    return temp[0];
+}
+
+// Update Bézier curve control points for up-and-down movement
+std::vector<glm::vec3> bezierControlPoints = {
+    glm::vec3(0.0f, 0.0f, 0.0f),  // Start at the center
+    glm::vec3(0.0f, 1.0f, 0.0f),  // Move up
+    glm::vec3(0.0f, 0.0f, 0.0f),  // Return to center
+    glm::vec3(0.0f, -1.0f, 0.0f), // Move down
+    glm::vec3(0.0f, 0.0f, 0.0f)   // Return to center
+};
+
+float bezierTime = 0.0f;
+bool bezierMovementEnabled = false;
+
 int main() {
     log("Initializing GLFW");
     if (!glfwInit()) {
@@ -464,6 +495,28 @@ int main() {
         }
         if (keyStates[GLFW_KEY_DOWN]) {
             camera.rotateVertical(-1.0f);
+        }
+
+        // Update Bézier movement in the render loop
+        if (bezierMovementEnabled) {
+            bezierTime += 0.01f / 3.0f; // Adjust time increment for 5-second loop
+            if (bezierTime > 1.0f) bezierTime = 0.0f; // Reset time after one loop
+
+            Entity& selectedEntity = entities[selectedEntityIndex];
+
+            // Ensure the original position is set only when Bézier movement is toggled on
+            if (!selectedEntity.bezierInitialized) {
+                selectedEntity.originalPosition = selectedEntity.position;
+                selectedEntity.bezierInitialized = true;
+            }
+
+            // Update the position of the selected entity to start Bézier movement from its original position
+            selectedEntity.position = selectedEntity.originalPosition + bezierPoint(bezierControlPoints, bezierTime);
+        } else {
+            // Reset Bézier state when movement is disabled
+            for (auto& entity : entities) {
+                entity.resetBezierState();
+            }
         }
 
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -547,5 +600,9 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         for (auto& color : lightColors) {
             color = glm::clamp(color, glm::vec3(0.0f), glm::vec3(3.0f));
         }
+    }
+
+    if (key == GLFW_KEY_B && action == GLFW_PRESS) {
+        bezierMovementEnabled = !bezierMovementEnabled;
     }
 }
