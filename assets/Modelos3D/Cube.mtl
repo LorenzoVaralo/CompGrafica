@@ -1,2 +1,12 @@
 # Blender 4.3.0 MTL File: 'None'
 # www.blender.org
+
+newmtl pixelWall
+Ns 233.659760
+Ka 1.000 1.000 1.000
+Kd 1.000 1.000 1.000
+Ks 0.000 0.000 0.000
+Ns 10.000
+d 1.0
+illum 2
+map_Kd ../assets/tex/pixelWall.png

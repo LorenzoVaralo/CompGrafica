@@ -17,6 +17,7 @@ void log(const std::string& message) {
 }
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
+std::unordered_map<int, bool> keyStates;
 const GLuint WIDTH = 1000, HEIGHT = 1000;
 int selectedEntityIndex = 0;
 class Camera {
@@ -435,10 +436,35 @@ int main() {
     log("Creating Entities");
     entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
     entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
+    entities.emplace_back(0.0f, -6.0f, 0.0f, 5.0f, "../assets/Modelos3D/Cube.obj", "../assets/Modelos3D/Cube.mtl");
 
     log("Entering render loop");
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        if (keyStates[GLFW_KEY_W]) {
+            camera.moveForward();
+        }
+        if (keyStates[GLFW_KEY_S]) {
+            camera.moveBackward();
+        }
+        if (keyStates[GLFW_KEY_A]) {
+            camera.moveLeft();
+        }
+        if (keyStates[GLFW_KEY_D]) {
+            camera.moveRight();
+        }
+        if (keyStates[GLFW_KEY_LEFT]) {
+            camera.rotateHorizontal(1.0f); 
+        }
+        if (keyStates[GLFW_KEY_RIGHT]) {
+            camera.rotateHorizontal(-1.0f);
+        }
+        if (keyStates[GLFW_KEY_UP]) {
+            camera.rotateVertical(1.0f); 
+        }
+        if (keyStates[GLFW_KEY_DOWN]) {
+            camera.rotateVertical(-1.0f);
+        }
 
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -455,9 +481,16 @@ int main() {
     return 0;
 }
 
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
+    }
+    
+    if (action == GLFW_PRESS) {
+        keyStates[key] = true;
+    } else if (action == GLFW_RELEASE) {
+        keyStates[key] = false;
     }
 
     if (action == GLFW_PRESS || action == GLFW_REPEAT) {
@@ -466,31 +499,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         float moveStep = 0.1f;
         float intensityStep = 0.1f;
 
-        if (key == GLFW_KEY_W) {
-            camera.moveForward();
-        }
-        if (key == GLFW_KEY_S) {
-            camera.moveBackward();
-        }
-        if (key == GLFW_KEY_A) {
-            camera.moveLeft();
-        }
-        if (key == GLFW_KEY_D) {
-            camera.moveRight();
-        }
-        if (key == GLFW_KEY_LEFT) {
-            camera.rotateHorizontal(5.0f); 
-        }
-        if (key == GLFW_KEY_RIGHT) {
-            camera.rotateHorizontal(-5.0f);
-        }
-        if (key == GLFW_KEY_UP) {
-            camera.rotateVertical(5.0f); 
-        }
-        if (key == GLFW_KEY_DOWN) {
-            camera.rotateVertical(-5.0f);
-        }
-
+        
         if (key == GLFW_KEY_X) {
             selectedEntity.toggleRotateX();
         }
