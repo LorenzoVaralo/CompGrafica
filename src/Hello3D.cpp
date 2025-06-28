@@ -11,6 +11,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <stb_image.h>
+#include <json.hpp>
+
+using json = nlohmann::json;
 
 void log(const std::string& message) {
     std::cerr << "[LOG]: " << message << std::endl;
@@ -80,17 +83,15 @@ GLuint loadTexture(const std::string& filepath) {
     return textureId;
 }
 
-glm::vec3 lightColors[] = {
-    glm::vec3(1.0f, 1.0f, 1.0f),
-    glm::vec3(0.4f, 0.4f, 0.4f),
-    glm::vec3(0.3f, 0.3f, 0.3f)
-};
+// Remove hardcoded light colors and positions
+std::vector<glm::vec3> lightColors;
+std::vector<glm::vec3> lightPositions;
 
-glm::vec3 lightPositions[] = {
-    glm::vec3(1.2f, 1.0f, 2.0f),  // Key Light
-    glm::vec3(-1.2f, 1.0f, 2.0f), // Fill Light
-    glm::vec3(1.2f, -1.0f, 2.0f)  // Back Light
-};
+// Remove hardcoded Bézier control points
+std::vector<glm::vec3> bezierControlPoints;
+
+// Remove hardcoded entities initialization
+// Entities will be initialized dynamically from the config file in loadConfig()
 
 class Entity {
 public:
@@ -422,16 +423,47 @@ glm::vec3 bezierPoint(const std::vector<glm::vec3>& controlPoints, float t) {
 }
 
 // Update Bézier curve control points for up-and-down movement
-std::vector<glm::vec3> bezierControlPoints = {
-    glm::vec3(0.0f, 0.0f, 0.0f),  // Start at the center
-    glm::vec3(0.0f, 1.0f, 0.0f),  // Move up
-    glm::vec3(0.0f, 0.0f, 0.0f),  // Return to center
-    glm::vec3(0.0f, -1.0f, 0.0f), // Move down
-    glm::vec3(0.0f, 0.0f, 0.0f)   // Return to center
-};
-
 float bezierTime = 0.0f;
 bool bezierMovementEnabled = false;
+
+void loadConfig(const std::string& configFilePath) {
+    std::ifstream configFile(configFilePath);
+    if (!configFile.is_open()) {
+        log("Failed to open config file: " + configFilePath);
+        return;
+    }
+
+    json config;
+    configFile >> config;
+
+    // Load camera position
+    auto cameraPos = config["camera"]["position"];
+    camera.position = glm::vec3(cameraPos[0], cameraPos[1], cameraPos[2]);
+
+    // Load lights
+    lightColors.clear();
+    lightPositions.clear();
+    for (const auto& light : config["lights"]) {
+        lightPositions.emplace_back(light["position"][0], light["position"][1], light["position"][2]);
+        lightColors.emplace_back(light["color"][0], light["color"][1], light["color"][2]);
+    }
+
+    // Load entities
+    entities.clear();
+    for (const auto& entity : config["entities"]) {
+        glm::vec3 position(entity["position"][0], entity["position"][1], entity["position"][2]);
+        float scale = entity["scale"];
+        std::string objFilePath = entity["objFilePath"];
+        std::string mtlFilePath = entity["mtlFilePath"];
+        entities.emplace_back(position.x, position.y, position.z, scale, objFilePath, mtlFilePath);
+    }
+
+    // Load Bézier control points
+    bezierControlPoints.clear();
+    for (const auto& point : config["bezier"]["controlPoints"]) {
+        bezierControlPoints.emplace_back(point[0], point[1], point[2]);
+    }
+}
 
 int main() {
     log("Initializing GLFW");
@@ -464,10 +496,8 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
-    log("Creating Entities");
-    entities.emplace_back(-0.5f, 0.0f, 0.0f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
-    entities.emplace_back(0.5f, 0.0f, 0.5f, 0.3f, "../assets/Modelos3D/Suzanne.obj", "../assets/Modelos3D/Suzanne.mtl");
-    entities.emplace_back(0.0f, -6.0f, 0.0f, 5.0f, "../assets/Modelos3D/Cube.obj", "../assets/Modelos3D/Cube.mtl");
+    // Load configuration
+    loadConfig("../config.json");
 
     log("Entering render loop");
     while (!glfwWindowShouldClose(window)) {
