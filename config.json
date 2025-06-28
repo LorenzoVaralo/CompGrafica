@@ -17,8 +17,8 @@
     {
       "position": [0.5, 0.0, 0.5],
       "scale": 0.3,
-      "objFilePath": "../assets/Modelos3D/Suzanne.obj",
-      "mtlFilePath": "../assets/Modelos3D/Suzanne.mtl"
+      "objFilePath": "../assets/Modelos3D/fish.obj",
+      "mtlFilePath": "../assets/Modelos3D/fish.mtl"
     },
     {
       "position": [0.0, -6.0, 0.0],

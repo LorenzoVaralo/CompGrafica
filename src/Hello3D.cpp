@@ -226,46 +226,93 @@ private:
                 glm::vec3 norm;
                 ssLine >> norm.x >> norm.y >> norm.z;
                 normals.push_back(norm);
-            } else if (prefix == "f") {
-                int vIndex[3], tIndex[3], nIndex[3];
-                for (int i = 0; i < 3; ++i) {
-                    std::string vertexData;
-                    ssLine >> vertexData;
-                    vIndex[i] = tIndex[i] = nIndex[i] = 0;
-                    int matches = sscanf(vertexData.c_str(), "%d/%d/%d", &vIndex[i], &tIndex[i], &nIndex[i]);
-                    if (matches < 1) {
-                        log("Invalid face data: " + vertexData);
-                        return -1;
-                    } else if (matches == 1) {
-                        // Vertex only
-                    } else if (matches >= 2) {
-                        if (tIndex[i] > 0) tIndex[i]--;
+            }
+            else if (prefix == "f")
+            {
+                std::string remaining_line;
+                std::getline(ssLine, remaining_line); // Read the rest of the line
+                std::stringstream face_ss(remaining_line);
+                std::string vertex_component;
+
+                struct VertexIndices
+                {
+                    int v, t, n;
+                };
+                std::vector<VertexIndices> face_indices;
+
+                // Read all vertex components from the line (handles 3 for triangles, 4 for quads, etc.)
+                while (face_ss >> vertex_component)
+                {
+                    std::stringstream component_ss(vertex_component);
+                    VertexIndices indices = {0, 0, 0};
+                    char slash;
+
+                    component_ss >> indices.v;
+                    if (component_ss.peek() == '/')
+                    {
+                        component_ss >> slash >> indices.t;
                     }
-                    if (vIndex[i] > 0) vIndex[i]--;
-                    if (nIndex[i] > 0) nIndex[i]--;
+                    if (component_ss.peek() == '/')
+                    {
+                        component_ss >> slash >> indices.n;
+                    }
+                    face_indices.push_back(indices);
                 }
 
-                for (int i = 0; i < 3; ++i) {
-                    vBuffer.push_back(vertices[vIndex[i]].x);
-                    vBuffer.push_back(vertices[vIndex[i]].y);
-                    vBuffer.push_back(vertices[vIndex[i]].z);
+                // Now, create triangles from the parsed indices
+                if (face_indices.size() >= 3)
+                {
+                    // Common vertex data for the first triangle (v0, v1, v2)
+                    int indices_to_process[] = {0, 1, 2};
+                    for (int i = 0; i < 3; ++i)
+                    {
+                        VertexIndices current_indices = face_indices[indices_to_process[i]];
+                        // OBJ is 1-based, arrays are 0-based
+                        int vIndex = current_indices.v > 0 ? current_indices.v - 1 : 0;
+                        int tIndex = current_indices.t > 0 ? current_indices.t - 1 : 0;
+                        int nIndex = current_indices.n > 0 ? current_indices.n - 1 : 0;
 
-                    if (!texCoords.empty() && tIndex[i] >= 0) {
-                        vBuffer.push_back(texCoords[tIndex[i]].x);
-                        vBuffer.push_back(texCoords[tIndex[i]].y);
-                    } else {
-                        vBuffer.push_back(0.0f);
-                        vBuffer.push_back(0.0f);
+                        vBuffer.push_back(vertices[vIndex].x);
+                        vBuffer.push_back(vertices[vIndex].y);
+                        vBuffer.push_back(vertices[vIndex].z);
+
+                        if (!texCoords.empty())
+                            vBuffer.push_back(texCoords[tIndex].x), vBuffer.push_back(texCoords[tIndex].y);
+                        else
+                            vBuffer.push_back(0.0f), vBuffer.push_back(0.0f);
+
+                        if (!normals.empty())
+                            vBuffer.push_back(normals[nIndex].x), vBuffer.push_back(normals[nIndex].y), vBuffer.push_back(normals[nIndex].z);
+                        else
+                            vBuffer.push_back(0.0f), vBuffer.push_back(0.0f), vBuffer.push_back(0.0f);
                     }
 
-                    if (!normals.empty() && nIndex[i] >= 0) {
-                        vBuffer.push_back(normals[nIndex[i]].x);
-                        vBuffer.push_back(normals[nIndex[i]].y);
-                        vBuffer.push_back(normals[nIndex[i]].z);
-                    } else {
-                        vBuffer.push_back(0.0f);
-                        vBuffer.push_back(0.0f);
-                        vBuffer.push_back(0.0f);
+                    // If it's a quad, create a second triangle (v0, v2, v3)
+                    if (face_indices.size() == 4)
+                    {
+                        int quad_indices_to_process[] = {0, 2, 3}; // The second triangle
+                        for (int i = 0; i < 3; ++i)
+                        {
+                            VertexIndices current_indices = face_indices[quad_indices_to_process[i]];
+                            // OBJ is 1-based, arrays are 0-based
+                            int vIndex = current_indices.v > 0 ? current_indices.v - 1 : 0;
+                            int tIndex = current_indices.t > 0 ? current_indices.t - 1 : 0;
+                            int nIndex = current_indices.n > 0 ? current_indices.n - 1 : 0;
+
+                            vBuffer.push_back(vertices[vIndex].x);
+                            vBuffer.push_back(vertices[vIndex].y);
+                            vBuffer.push_back(vertices[vIndex].z);
+
+                            if (!texCoords.empty())
+                                vBuffer.push_back(texCoords[tIndex].x), vBuffer.push_back(texCoords[tIndex].y);
+                            else
+                                vBuffer.push_back(0.0f), vBuffer.push_back(0.0f);
+
+                            if (!normals.empty())
+                                vBuffer.push_back(normals[nIndex].x), vBuffer.push_back(normals[nIndex].y), vBuffer.push_back(normals[nIndex].z);
+                            else
+                                vBuffer.push_back(0.0f), vBuffer.push_back(0.0f), vBuffer.push_back(0.0f);
+                        }
                     }
                 }
             }
