@@ -19,6 +19,8 @@ void log(const std::string& message) {
     std::cerr << "[LOG]: " << message << std::endl;
 }
 
+glm::vec3 bezierPoint(const std::vector<glm::vec3>& controlPoints, float t);
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mode);
 std::unordered_map<int, bool> keyStates;
 const GLuint WIDTH = 1000, HEIGHT = 1000;
@@ -98,6 +100,8 @@ public:
     glm::vec3 position;
     glm::vec3 originalPosition; // Store the original position for Bézier movement
     bool bezierInitialized = false; // Track if Bézier movement is initialized for this entity
+    std::vector<glm::vec3> bezierControlPoints; // Unique Bézier control points for this entity
+    float bezierTime = 0.0f; // Time state for Bézier movement
 
     Entity(float x, float y, float z, float initialScale, const std::string& objFilePath, const std::string& mtlFilePath)
         : position(x, y, z), originalPosition(x, y, z), scaleFactor(initialScale), VAO(0), texture(0), nVertices(0),
@@ -111,6 +115,21 @@ public:
 
     void resetBezierState() {
         bezierInitialized = false;
+        bezierTime = 0.0f;
+    }
+
+    void updateBezierMovement() {
+        if (!bezierControlPoints.empty()) {
+            bezierTime += 0.01f / 3.0f; // Adjust time increment for 5-second loop
+            if (bezierTime > 1.0f) bezierTime = 0.0f; // Reset time after one loop
+
+            if (!bezierInitialized) {
+                originalPosition = position;
+                bezierInitialized = true;
+            }
+
+            position = originalPosition + bezierPoint(bezierControlPoints, bezierTime);
+        }
     }
 
     void draw() {
@@ -503,12 +522,11 @@ void loadConfig(const std::string& configFilePath) {
         std::string objFilePath = entity["objFilePath"];
         std::string mtlFilePath = entity["mtlFilePath"];
         entities.emplace_back(position.x, position.y, position.z, scale, objFilePath, mtlFilePath);
-    }
 
-    // Load Bézier control points
-    bezierControlPoints.clear();
-    for (const auto& point : config["bezier"]["controlPoints"]) {
-        bezierControlPoints.emplace_back(point[0], point[1], point[2]);
+        // Load Bézier control points for the entity
+        for (const auto& point : entity["bezierControlPoints"]) {
+            entities.back().bezierControlPoints.emplace_back(point[0], point[1], point[2]);
+        }
     }
 }
 
@@ -574,32 +592,15 @@ int main() {
             camera.rotateVertical(-1.0f);
         }
 
-        // Update Bézier movement in the render loop
-        if (bezierMovementEnabled) {
-            bezierTime += 0.01f / 3.0f; // Adjust time increment for 5-second loop
-            if (bezierTime > 1.0f) bezierTime = 0.0f; // Reset time after one loop
-
-            Entity& selectedEntity = entities[selectedEntityIndex];
-
-            // Ensure the original position is set only when Bézier movement is toggled on
-            if (!selectedEntity.bezierInitialized) {
-                selectedEntity.originalPosition = selectedEntity.position;
-                selectedEntity.bezierInitialized = true;
-            }
-
-            // Update the position of the selected entity to start Bézier movement from its original position
-            selectedEntity.position = selectedEntity.originalPosition + bezierPoint(bezierControlPoints, bezierTime);
-        } else {
-            // Reset Bézier state when movement is disabled
-            for (auto& entity : entities) {
-                entity.resetBezierState();
-            }
-        }
-
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         for (auto& entity : entities) {
+            if (bezierMovementEnabled) {
+                entity.updateBezierMovement();
+            } else {
+                entity.resetBezierState();
+            }
             entity.draw();
         }
 

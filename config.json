@@ -10,30 +10,37 @@
   "entities": [
     {
       "position": [-0.5, 0.0, 0.0],
-      "scale": 0.3,
-      "objFilePath": "../assets/Modelos3D/Suzanne.obj",
-      "mtlFilePath": "../assets/Modelos3D/Suzanne.mtl"
+      "scale": 1.0,
+      "objFilePath": "../assets/Modelos3D/12960_Shark_v2_L1.obj",
+      "mtlFilePath": "../assets/Modelos3D/12960_Shark_v2_L1.mtl",
+      "bezierControlPoints": [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, -1.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 0.0]
+      ]
     },
     {
       "position": [0.5, 0.0, 0.5],
       "scale": 0.3,
       "objFilePath": "../assets/Modelos3D/fish.obj",
-      "mtlFilePath": "../assets/Modelos3D/fish.mtl"
+      "mtlFilePath": "../assets/Modelos3D/fish.mtl",
+      "bezierControlPoints": [
+        [0.0, 0.0, 0.0],
+        [0.5, 0.5, 0.0],
+        [0.0, 0.0, 0.0]
+      ]
     },
     {
       "position": [0.0, -6.0, 0.0],
       "scale": 5.0,
       "objFilePath": "../assets/Modelos3D/Cube.obj",
-      "mtlFilePath": "../assets/Modelos3D/Cube.mtl"
+      "mtlFilePath": "../assets/Modelos3D/Cube.mtl",
+      "bezierControlPoints": [
+        [0.0, 0.0, 0.0],
+        [0.0, -5.0, 0.0],
+        [0.0, 0.0, 0.0]
+      ]
     }
-  ],
-  "bezier": {
-    "controlPoints": [
-      [0.0, 0.0, 0.0],
-      [0.0, 1.0, 0.0],
-      [0.0, 0.0, 0.0],
-      [0.0, -1.0, 0.0],
-      [0.0, 0.0, 0.0]
-    ]
-  }
+  ]
 }
